@@ -9,20 +9,9 @@ from app.database import Base, engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: log target and ensure schemas exist
-    safe_db_url = settings.DATABASE_URL
-    if "@" in safe_db_url:
-        prefix, host_part = safe_db_url.split("@", 1)
-        protocol = prefix.split("://")[0]
-        safe_db_url = f"{protocol}://***:***@{host_part}"
-    print(f"[STARTUP] Connecting to database at: {safe_db_url}")
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        print("[STARTUP] Database connection verified and tables ready.")
-    except Exception as exc:
-        print(f"[STARTUP ERROR] Could not connect to database at {safe_db_url}: {exc}")
-        raise exc
+    # Startup: ensure schemas exist
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
     # Shutdown: dispose connections cleanly
     await engine.dispose()
@@ -45,13 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register API routes
-app.include_router(auth.router, prefix=settings.API_V1_STR)
-app.include_router(outlets.router, prefix=settings.API_V1_STR)
-app.include_router(menu.router, prefix=settings.API_V1_STR)
-app.include_router(orders.router, prefix=settings.API_V1_STR)
-app.include_router(staff.router, prefix=settings.API_V1_STR)
-app.include_router(favorites.router, prefix=settings.API_V1_STR)
+# Register API routes (both with /api prefix and root for full client compatibility)
+routers = [auth.router, outlets.router, menu.router, orders.router, staff.router, favorites.router]
+for r in routers:
+    app.include_router(r, prefix=settings.API_V1_STR)
+    app.include_router(r)
 
 
 @app.get("/health", tags=["System"])
