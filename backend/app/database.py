@@ -13,6 +13,7 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=(settings.ENVIRONMENT == "development"),
     pool_pre_ping=True,
+    connect_args={"ssl": "require"},
     pool_size=10,
     max_overflow=20,
 )
