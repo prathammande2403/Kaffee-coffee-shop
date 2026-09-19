@@ -14,7 +14,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     password_bytes = plain_password.encode('utf-8')
     hashed_bytes = hashed_password.encode('utf-8')
     
-    # Enforce bcrypt's 72-byte safety limit
+    # Enforce bcrypt's 72-byte limit safety check
     if len(password_bytes) > 72:
         password_bytes = password_bytes[:72]
         
