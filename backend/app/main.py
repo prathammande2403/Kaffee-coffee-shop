@@ -26,8 +26,7 @@ app = FastAPI(
 
 origins = [
     "http://localhost:5173",          # Local development
-    "http://localhost:3000",          # Alternative local port
-    "https://kaffee-coffee-shop-indol.vercel.app",  # Previous Vercel URL
+    "http://localhost:3000",          # Alternative local port  
     "https://kaffa-coffee-shop-kaffee.vercel.app",  # Your current active Vercel frontend URL
 ]
 
