@@ -24,10 +24,17 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+origins = [
+    "http://localhost:5173",          # Local development
+    "http://localhost:3000",          # Alternative local port
+    "https://kaffee-coffee-shop-indol.vercel.app",  # Previous Vercel URL
+    "https://kaffa-coffee-shop-kaffee.vercel.app",  # Your current active Vercel frontend URL
+]
+
 # Enable CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    allow_origins=origins,
     allow_origin_regex=r"https:\/\/.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
