@@ -24,9 +24,16 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             # Render/Heroku provide postgres:// or postgresql:// which need asyncpg for SQLAlchemy async engine
             if v.startswith("postgres://"):
-                return v.replace("postgres://", "postgresql+asyncpg://", 1)
+                v = v.replace("postgres://", "postgresql+asyncpg://", 1)
             elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
-                return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+                v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+            # Supabase direct connection (db.<ref>.supabase.co) is IPv6-only, which fails on Render (IPv4 only).
+            # Auto-route to the Supabase connection pooler in ap-southeast-1.
+            if "db.xlduyqgdldiebzlqvffv.supabase.co" in v:
+                v = v.replace("db.xlduyqgdldiebzlqvffv.supabase.co", "aws-0-ap-southeast-1.pooler.supabase.com")
+                if "postgres:" in v and "postgres.xlduyqgdldiebzlqvffv" not in v:
+                    v = v.replace("postgres:", "postgres.xlduyqgdldiebzlqvffv:", 1)
         return v
 
     # CORS Whitelist
