@@ -11,11 +11,10 @@ from app.core.config import settings
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    # bcrypt expects bytes and has a strict 72-byte limit
     password_bytes = plain_password.encode('utf-8')
     hashed_bytes = hashed_password.encode('utf-8')
     
-    # Optional safety truncate for passwords over 72 bytes to prevent ValueError
+    # Enforce bcrypt's 72-byte safety limit
     if len(password_bytes) > 72:
         password_bytes = password_bytes[:72]
         
