@@ -61,9 +61,10 @@ export const MenuPage: React.FC = () => {
     },
   });
 
-  // Fetch saved favorite presets
+  // Fetch saved favorite presets (only when authenticated)
   const { data: favorites = [] } = useQuery<FavoriteItem[]>({
     queryKey: ['favorites'],
+    enabled: Boolean(localStorage.getItem('access_token')),
     queryFn: async () => {
       try {
         const res = await api.get('/favorites');
