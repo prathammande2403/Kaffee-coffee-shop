@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
-    # PostgreSQL Database URL
-    DATABASE_URL: str = "postgresql+asyncpg://localhost:5432/coffeedb"
+    # PostgreSQL Database URL (defaults to Supabase connection pooler if not provided via environment)
+    DATABASE_URL: str = "postgresql+asyncpg://postgres.xlduyqgdldiebzlqvffv:Pratham*2004@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
@@ -34,6 +34,10 @@ class Settings(BaseSettings):
                 v = v.replace("db.xlduyqgdldiebzlqvffv.supabase.co", "aws-0-ap-southeast-1.pooler.supabase.com")
                 if "postgres:" in v and "postgres.xlduyqgdldiebzlqvffv" not in v:
                     v = v.replace("postgres:", "postgres.xlduyqgdldiebzlqvffv:", 1)
+
+            # asyncpg does not support sslmode=, it expects ssl=
+            if "sslmode=" in v:
+                v = v.replace("sslmode=", "ssl=")
         return v
 
     # CORS Whitelist

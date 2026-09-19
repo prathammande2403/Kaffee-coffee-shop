@@ -9,9 +9,20 @@ from app.database import Base, engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: ensure schemas exist
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Startup: log target and ensure schemas exist
+    safe_db_url = settings.DATABASE_URL
+    if "@" in safe_db_url:
+        prefix, host_part = safe_db_url.split("@", 1)
+        protocol = prefix.split("://")[0]
+        safe_db_url = f"{protocol}://***:***@{host_part}"
+    print(f"[STARTUP] Connecting to database at: {safe_db_url}")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[STARTUP] Database connection verified and tables ready.")
+    except Exception as exc:
+        print(f"[STARTUP ERROR] Could not connect to database at {safe_db_url}: {exc}")
+        raise exc
     yield
     # Shutdown: dispose connections cleanly
     await engine.dispose()
