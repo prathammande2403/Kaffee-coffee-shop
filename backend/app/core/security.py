@@ -10,22 +10,25 @@ from jose import JWTError, jwt
 from app.core.config import settings
 
 
-def get_password_hash(password: str) -> str:
-    """Hash a plaintext password before storing in the database."""
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    return hashed.decode("utf-8")
-
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against its bcrypt hash."""
-    try:
-        return bcrypt.checkpw(
-            plain_password.encode("utf-8"),
-            hashed_password.encode("utf-8"),
-        )
-    except Exception:
-        return False
+    # bcrypt expects bytes and has a strict 72-byte limit
+    password_bytes = plain_password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    
+    # Optional safety truncate for passwords over 72 bytes to prevent ValueError
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+        
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
+
+def get_password_hash(password: str) -> str:
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+        
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def create_access_token(
