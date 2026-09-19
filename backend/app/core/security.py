@@ -1,38 +1,31 @@
+"""
+Security utilities: JWT token creation/validation and password hashing.
+Uses bcrypt directly (no passlib) to avoid passlib 1.7.4 + bcrypt 4.x incompatibility
+on Python 3.11 / Linux (Render).
+"""
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from app.core.config import settings
-
-# Passlib + Bcrypt 4.1+ compatibility fix (Render/Linux installs latest bcrypt which lacks __about__)
-if not hasattr(bcrypt, "__about__"):
-    class FakeAbout:
-        __version__ = getattr(bcrypt, "__version__", "4.0.1")
-    bcrypt.__about__ = FakeAbout()
-
-# Configure bcrypt password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def get_password_hash(password: str) -> str:
     """Hash a plaintext password before storing in the database."""
-    try:
-        return pwd_context.hash(password)
-    except Exception:
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against its bcrypt hash with fallback."""
+    """Verify a plain password against its bcrypt hash."""
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
     except Exception:
-        try:
-            return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-        except Exception:
-            return False
+        return False
 
 
 def create_access_token(
