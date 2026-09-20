@@ -1,159 +1,351 @@
-# Kaffa Coffee Roasters — Web Application Frontend
+# ☕ Kaffee — Coffee Shop Ordering & Roastery Management Platform
 
-A modern, responsive, specialty coffee ordering and roastery kitchen management web application built with **React 18**, **TypeScript**, **Vite**, and **Tailwind CSS**.
+A full-stack, production-style **coffee ordering and roastery kitchen management system**, built as a monorepo with a **FastAPI** backend and a **React 18 + TypeScript + Vite** frontend. Customers can browse outlet-specific menus, customize drinks, check out, track orders live, and earn/redeem loyalty points — while staff and admins run the kitchen from a dedicated operations dashboard.
 
-The frontend interacts with the FastAPI backend strictly according to [`API_CONTRACT.md`](../API_CONTRACT.md), maintaining **zero modifications** to the backend codebase while implementing resilient fallbacks and comprehensive client-side validation.
+**Live demo:** [kaffee-coffee-shop-indol.vercel.app](https://kaffee-coffee-shop-indol.vercel.app)
 
 ---
 
-## ☕ Key Features
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Key Features](#key-features)
+  - [Customer Experience](#1-customer-ordering-experience)
+  - [Barista & Admin Portal](#2-barista--admin-portal)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#1-prerequisites)
+  - [Backend Setup](#2-backend-setup)
+  - [Frontend Setup](#3-frontend-setup)
+  - [Running with Docker](#4-running-with-docker)
+- [Test Credentials](#test-credentials)
+- [Validation Coverage](#validation-coverage)
+- [Backend Assumptions & Resilient Handling](#backend-assumptions--resilient-handling)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+
+---
+
+## Overview
+
+Kaffee is split into two independently deployable services that communicate over a documented REST contract (`API_CONTRACT.md`):
+
+| Service | Description |
+|---|---|
+| **`backend/`** | A FastAPI application exposing auth, outlet, menu, order, and staff-management endpoints, backed by SQLAlchemy models and a seed script. |
+| **`frontend/`** | A React + TypeScript SPA that consumes the backend strictly according to the API contract, with resilient client-side fallbacks and full form validation. |
+
+The two halves are designed to be built and shipped separately (see `render.yaml` for a Render.com blueprint and `docker-compose.yml` for local multi-container orchestration).
+
+## Architecture
+
+```
+Customer / Staff Browser
+        │
+        ▼
+ React 18 + TS + Vite  (frontend/, port 5173 dev / 80 prod)
+        │  Axios + JWT interceptors, 3s polling
+        ▼
+ FastAPI backend       (backend/, port 8000)
+        │  SQLAlchemy ORM
+        ▼
+   Relational Database
+```
+
+- **Auth**: JWT-based, role-gated (`customer`, `staff`, `admin`).
+- **State sync**: Live order status is kept fresh via 3-second polling rather than websockets, on both the customer tracking page and the staff kitchen board.
+- **Contract-first**: The frontend treats `API_CONTRACT.md` as the source of truth and makes **zero modifications** to backend code, instead building resilient fallbacks for any real-world quirks it discovers (see [Backend Assumptions](#backend-assumptions--resilient-handling)).
+
+---
+
+## Key Features
 
 ### 1. Customer Ordering Experience
-- **Outlet Selection**: Real-time outlet discovery displaying operating hours, current open/closed status, street address, and estimated preparation time. Persisted globally to scope the menu.
-- **Dynamic Menu & Customization**:
-  - Outlet-scoped categorization (`Hot Coffee`, `Cold Coffee`, `Matcha & Teas`, `Bakery & Food`, `Add-ons`).
-  - Out-of-stock / sold-out state indicators with disabled purchase controls.
-  - Interactive drink customizer modal supporting size selection, milk alternatives, sweetness levels, and add-on modifiers with live price deltas.
-  - 1-tap "Save as Favorite Preset" to reorder personalized builds with a single click.
-- **Cart & Transparent Checkout**:
-  - Itemized quantity editing and custom modifier reconfiguration.
+
+- **Outlet Selection** — real-time outlet discovery with operating hours, live open/closed status, address, and estimated prep time. The chosen outlet is persisted globally and scopes the entire menu.
+- **Dynamic Menu & Customization**
+  - Outlet-scoped categories: `Hot Coffee`, `Cold Coffee`, `Matcha & Teas`, `Bakery & Food`, `Add-ons`.
+  - Out-of-stock / sold-out indicators that disable purchase controls.
+  - A drink customizer modal for size, milk alternatives, sweetness level, and add-on modifiers with live price deltas.
+  - One-tap **"Save as Favorite Preset"** to reorder a personalized build instantly.
+- **Cart & Transparent Checkout**
+  - Itemized quantity editing and modifier reconfiguration.
   - Real-time subtotal, 5% GST calculation, and loyalty discount deductions.
-  - Pickup slot selection: **Brew Now (Immediate)** or **Scheduled Pickup** adhering to outlet operating hours and roastery prep buffers.
-  - Loyalty point redemption validator enforcing the backend's minimum threshold, balance constraints, and maximum payable caps.
-  - Payment gateway simulation modal (supporting UPI, Credit/Debit Cards, Net Banking) with simulated decline testing and real backend order submission.
-- **Live Order Tracking & History**:
-  - Real-time order progress tracking (`ORDER_RECEIVED` $\rightarrow$ `PREPARING` $\rightarrow$ `READY_FOR_PICKUP` $\rightarrow$ `COMPLETED`) powered by 3-second live polling.
-  - One-click customer order cancellation (reversing points).
-  - "Repeat Previous Order" 1-click reorder mechanism calling `POST /api/orders/{id}/repeat`.
-  - Comprehensive order history with status filter tabs (`All`, `Active`, `Completed`, `Cancelled`) and instant ID search.
-- **Loyalty Ledger**:
-  - Visual points card displaying available balance, equivalent rupee discount, and redemption progress.
-  - Complete chronological audit log of all point earnings, redemptions, and refund reversals tied to order IDs.
+  - Pickup slot selection: **Brew Now (Immediate)** or **Scheduled Pickup**, constrained to outlet hours plus roastery prep buffers.
+  - Loyalty point redemption validator enforcing minimum threshold, balance limits, and payable caps.
+  - A simulated payment gateway (UPI, Credit/Debit Card, Net Banking) — including simulated decline testing — that submits real orders to the backend.
+- **Live Order Tracking & History**
+  - Real-time status progression: `ORDER_RECEIVED → PREPARING → READY_FOR_PICKUP → COMPLETED`, via 3-second polling.
+  - One-click order cancellation with automatic loyalty point reversal.
+  - **"Repeat Previous Order"** — one-click reorder via `POST /api/orders/{id}/repeat`.
+  - Full order history with status filter tabs (`All`, `Active`, `Completed`, `Cancelled`) and instant order-ID search.
+- **Loyalty Ledger**
+  - A points card showing available balance, rupee-equivalent discount, and redemption progress.
+  - A chronological audit log of every earning, redemption, and refund reversal, tied back to order IDs.
 
-### 2. Barista & Admin Portal (`/admin` and `/staff`)
-- **Kitchen Orders Board**:
+### 2. Barista & Admin Portal
+
+Available at `/staff` and `/admin`.
+
+- **Kitchen Orders Board**
   - Live 3-second polling on `GET /api/staff/orders`.
-  - Filter tabs across all order states with real-time counters.
-  - Scheduled vs Immediate pickup badges with formatted IST timestamps.
+  - Filter tabs across every order state, with real-time counters.
+  - Scheduled vs. Immediate pickup badges with formatted IST timestamps.
   - One-click **Accept** (`PATCH /api/staff/orders/{id}/decision`, `action: "ACCEPT"`).
-  - Modal **Reject with Reason** (`action: "REJECT"`), triggering automatic customer point refunds.
-  - Order state machine transitions: *Brewing* $\rightarrow$ *Ready at Counter* $\rightarrow$ *Completed / Handed Over*.
-- **Customer & Payment Details View**:
-  - Detailed modal showing customer identifiers, scheduled pickup times, itemized modifiers, 5% GST, loyalty discounts, and payment status (`PAID` / `REFUNDED`).
-- **Menu & Catalog Management**:
+  - **Reject with Reason** modal (`action: "REJECT"`), which automatically triggers a customer point refund.
+  - Order state machine: *Brewing → Ready at Counter → Completed / Handed Over*.
+- **Customer & Payment Details View** — a detailed modal showing customer identifiers, scheduled pickup time, itemized modifiers, GST, loyalty discount, and payment status (`PAID` / `REFUNDED`).
+- **Menu & Catalog Management**
   - Global catalog availability toggle (`PATCH /api/staff/products/{id}/availability`).
-  - Outlet-specific stock override (`PATCH /api/staff/products/{id}/outlet-availability`).
-  - Add new products modal with custom modifier builder (`POST /api/staff/products`).
-  - Delete products and associated modifiers (`DELETE /api/staff/products/{id}`).
-- **Strict Role Gating**:
-  - Enforced via `ProtectedRoute` allowing only `staff` and `admin` roles, matching the backend's `User.role` schema.
-  - Unauthorized customers are blocked with an informative access denied screen.
+  - Outlet-specific stock overrides (`PATCH /api/staff/products/{id}/outlet-availability`).
+  - Add new products with a custom modifier builder (`POST /api/staff/products`).
+  - Delete products and their associated modifiers (`DELETE /api/staff/products/{id}`).
+- **Strict Role Gating** — enforced client-side via `ProtectedRoute` (`allowedRoles={['staff', 'admin']}`), matching the backend's `User.role` schema. Standard customers see an informative access-denied screen rather than a blank page.
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
-| Layer | Technologies |
-| :--- | :--- |
-| **Core Framework** | [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) |
-| **Build Tool** | [Vite 5](https://vitejs.dev/) |
-| **Styling** | [Tailwind CSS](https://tailwindcss.com/) + Custom typography (`Playfair Display` & `Plus Jakarta Sans`) |
-| **Server State & Polling** | [TanStack React Query v5](https://tanstack.com/query/latest) |
-| **Client State** | [Zustand](https://github.com/pmndrs/zustand) (cart persistence, selected outlet) |
-| **HTTP Client** | [Axios](https://axios-http.com/) (JWT interceptors & 401 handling) |
-| **Icons** | [Lucide React](https://lucide.dev/) |
+### Frontend
+
+| Layer | Technology |
+|---|---|
+| Core Framework | [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) |
+| Build Tool | [Vite 5](https://vitejs.dev/) |
+| Styling | [Tailwind CSS](https://tailwindcss.com/) + custom typography (`Playfair Display`, `Plus Jakarta Sans`) |
+| Server State & Polling | [TanStack React Query v5](https://tanstack.com/query/latest) |
+| Client State | [Zustand](https://github.com/pmndrs/zustand) (cart persistence, selected outlet) |
+| HTTP Client | [Axios](https://axios-http.com/) with JWT interceptors and 401 handling |
+| Icons | [Lucide React](https://lucide.dev/) |
+
+### Backend
+
+| Layer | Technology |
+|---|---|
+| Framework | [FastAPI](https://fastapi.tiangolo.com/) |
+| ORM | SQLAlchemy models (`app/models`) |
+| Validation | Pydantic schemas (`app/schemas`) |
+| Auth | JWT-based security (`app/core/security.py`) |
+| Config | Environment-driven settings (`app/core/config.py`) |
+| Containerization | Docker (see `backend/Dockerfile`) |
 
 ---
 
-## 🚀 Getting Started
+## Project Structure
+
+```
+coffee-app/
+├── backend/
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── config.py
+│   │   │   └── security.py
+│   │   ├── models/
+│   │   │   └── models.py
+│   │   ├── schemas/
+│   │   │   └── schemas.py
+│   │   ├── api/
+│   │   │   ├── deps.py
+│   │   │   ├── auth.py
+│   │   │   ├── outlets.py
+│   │   │   ├── menu.py
+│   │   │   ├── orders.py
+│   │   │   └── staff.py
+│   │   ├── database.py
+│   │   ├── seed.py
+│   │   └── main.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   │   └── client.ts
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx
+│   │   ├── store/
+│   │   │   └── useCartStore.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   ├── utils/
+│   │   │   └── formatters.ts
+│   │   ├── components/
+│   │   │   ├── Navbar.tsx
+│   │   │   ├── CustomizerModal.tsx
+│   │   │   └── ProtectedRoute.tsx
+│   │   ├── pages/
+│   │   │   ├── OutletSelectPage.tsx
+│   │   │   ├── MenuPage.tsx
+│   │   │   ├── CheckoutPage.tsx
+│   │   │   ├── OrderTrackingPage.tsx
+│   │   │   ├── StaffDashboardPage.tsx
+│   │   │   ├── LoginPage.tsx
+│   │   │   └── RegisterPage.tsx
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   ├── tailwind.config.js
+│   └── Dockerfile
+├── API_CONTRACT.md
+├── docker-compose.yml
+└── render.yaml
+```
+
+---
+
+## Getting Started
 
 ### 1. Prerequisites
-- **Node.js** (v18.0.0 or later)
-- **npm** (v9.0.0 or later)
-- Backend server running on `http://127.0.0.1:8000` (or configured URL)
 
-### 2. Installation
+- **Node.js** v18.0.0 or later
+- **npm** v9.0.0 or later
+- **Python** 3.10+ (for the backend)
+- **Docker & Docker Compose** (optional, for containerized setup)
+
+### 2. Backend Setup
+
 ```bash
-# Navigate to the frontend directory
+cd backend
+
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment variables (database URL, JWT secret, etc.)
+cp .env.example .env   # create/edit as needed
+
+# (Optional) seed the database with demo data
+python -m app.seed
+
+# Run the API
+uvicorn app.main:app --reload --port 8000
+```
+
+The API will be available at **`http://127.0.0.1:8000`**, with interactive docs at `http://127.0.0.1:8000/docs`.
+
+### 3. Frontend Setup
+
+```bash
 cd frontend
 
 # Install dependencies
 npm install
-```
 
-### 3. Environment Configuration
-Create a `.env` file in the `frontend` root (or copy `.env.example`):
-```bash
+# Configure the backend URL
 cp .env.example .env
 ```
 
-Contents of `.env`:
-```env
-# Roastery Backend API Base URL
+`.env` contents:
+
+```
 VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
-### 4. Running the Development Server
 ```bash
+# Start the dev server
 npm run dev
 ```
-The application will be accessible at: **`http://localhost:5173`**
 
-### 5. Production Build & Verification
+The app will be available at **`http://localhost:5173`**.
+
+**Production build & verification:**
+
 ```bash
-# Type check and build production bundle
-npm run build
-
-# Preview production build locally
-npm run preview
+npm run build      # type-check + build
+npm run preview    # preview the production bundle locally
 ```
 
+### 4. Running with Docker
+
+From the repository root:
+
+```bash
+docker-compose up --build
+```
+
+This builds and starts both services:
+
+| Service | Port |
+|---|---|
+| `backend` | `8000` |
+| `frontend` | `80` |
+
+The backend reads its configuration from `backend/.env`, and the frontend depends on the backend container being up first.
+
 ---
 
-## 🔐 Credentials for Testing
+## Test Credentials
 
 | Persona | Email | Password | Role | Access |
-| :--- | :--- | :--- | :--- | :--- |
-| **Customer** | `alex@coffee.com` | `alex123` | `customer` | Full customer ordering, cart, tracking, loyalty ledger |
+|---|---|---|---|---|
+| **Customer** | `alex@coffee.com` | `alex123` | `customer` | Full ordering, cart, tracking, loyalty ledger |
 | **Staff / Barista** | `staff@coffee.com` | `staff123` | `staff` | Kitchen orders board (`/staff`, `/admin`), catalog management |
 
-*(Quick-autofill buttons are provided on the `/login` screen for rapid testing)*
+Quick-autofill buttons for both personas are available on the `/login` screen.
 
 ---
 
-## 🔍 Validation Coverage Audit (vs API_CONTRACT.md)
+## Validation Coverage
 
 | Form / Flow | Field | Validation Rules | Error Behavior |
-| :--- | :--- | :--- | :--- |
-| **Registration** | `full_name` | Required, 2–100 characters. | Inline field error message. |
-| | `email` | Required, valid RFC 5322 regex. | Inline field error message. |
-| | `phone_number` | Required, 10–15 digits (clean string). | Inline field error message. |
-| | `password` | Required, 6–128 characters. | Inline field error message. |
-| **Login** | `email` / `password` | Required non-empty; min 6 chars. | Inline validation & HTTP 401 banner. |
-| **Cart & Checkout** | `outlet_id` | Must be selected in state. | Blocks checkout with prompt to select outlet. |
-| | `pickup_type` | `'immediate'` or `'scheduled'`. | Validated before checkout submission. |
-| | `scheduled_pickup_time` | If scheduled: must be in the future, within outlet open/close hours, and account for `avg_prep_minutes`. | Inline warning and blocks modal opening. |
-| | `points_to_redeem` | Minimum 50 points; $\le$ available balance; $\le$ payable total. | Live error warning; capped automatically. |
-| | `items` | Minimum 1 item; `quantity` $\ge 1$. | Blocks checkout when cart is empty. |
-| **Staff Dashboard** | Rejection Reason | String captured in modal. | Passed in `PATCH /staff/orders/{id}/decision`. |
-| | Product Creation | Name required, base price > 0, category valid enum, modifiers validated. | Disables submit until required fields valid. |
+|---|---|---|---|
+| **Registration** | `full_name` | Required, 2–100 characters | Inline field error |
+| | `email` | Required, valid RFC 5322 format | Inline field error |
+| | `phone_number` | Required, 10–15 digits | Inline field error |
+| | `password` | Required, 6–128 characters | Inline field error |
+| **Login** | `email` / `password` | Required, non-empty, min 6 chars | Inline validation + HTTP 401 banner |
+| **Cart & Checkout** | `outlet_id` | Must be selected in state | Blocks checkout, prompts outlet selection |
+| | `pickup_type` | `'immediate'` or `'scheduled'` | Validated pre-submission |
+| | `scheduled_pickup_time` | Must be future, within outlet hours, accounts for `avg_prep_minutes` | Inline warning, blocks modal |
+| | `points_to_redeem` | ≥ 50 points; ≤ balance; ≤ payable total | Live warning, auto-capped |
+| | `items` | ≥ 1 item; `quantity` ≥ 1 | Blocks checkout on empty cart |
+| **Staff Dashboard** | Rejection Reason | Free-text, captured in modal | Sent via `PATCH /staff/orders/{id}/decision` |
+| | Product Creation | Name required, base price > 0, valid category enum, modifiers validated | Submit disabled until valid |
 
 ---
 
-## ⚙️ Backend Assumptions & Resilient Handling
+## Backend Assumptions & Resilient Handling
 
-During development against [`API_CONTRACT.md`](../API_CONTRACT.md) and the live backend, several real-world behaviors were discovered and gracefully addressed without touching the backend code:
+While building strictly against `API_CONTRACT.md` and the live backend, a few real-world behaviors were discovered and handled **entirely on the frontend**, without touching backend code:
 
-1. **Customer Order Details Serialization Gotcha (`GET /api/orders/{order_id}`)**:
-   - In `backend/app/api/orders.py`, the endpoint `get_order_details` omitted a return statement at the end of the handler, causing FastAPI to return HTTP `500 Internal Server Error`.
-   - **Frontend Solution**: [OrderTrackingPage.tsx](src/pages/OrderTrackingPage.tsx) attempts `GET /orders/{order_id}` with a resilient automatic fallback to `GET /orders` filtering by `order.id`. This ensures customer order tracking is 100% reliable with zero downtime.
-2. **Loyalty Redemption Rule Enforcement**:
-   - Backend enforces a minimum redemption threshold of **50 points**, where 1 point = ₹1.00 discount. Points are capped at the total amount payable.
-   - Frontend provides live client-side validation reflecting this policy, preventing invalid API payloads.
-3. **Staff Role Gating Mechanism**:
-   - The backend's `get_current_staff` dependency strictly permits accounts where `User.role in ['staff', 'admin']` and returns HTTP `403 Forbidden` for standard customer accounts.
-   - The frontend's `ProtectedRoute` strictly enforces `allowedRoles={['staff', 'admin']}` on `/staff` and `/admin` routes without inventing artificial role hierarchies.
-4. **Dynamic Pickup Slot Generation**:
-   - The frontend dynamically computes valid future pickup slots in 15-minute increments based on the outlet's `opening_time`, `closing_time`, and `avg_prep_minutes`, preventing customer orders outside operating hours.
-5. **Simulated Payment Gateway**:
-   - The backend handles payment confirmation via order creation and order status updates. The frontend wraps this in a realistic simulated checkout gateway (supporting failure testing) that directly submits the payload to the real backend order and payment endpoints.
+1. **Order Details Serialization Gotcha** (`GET /api/orders/{order_id}`)
+   `get_order_details` in `backend/app/api/orders.py` omits a return statement in one code path, causing an HTTP `500`. `OrderTrackingPage.tsx` works around this with an automatic fallback: it calls `GET /orders` and filters client-side by `order.id`, keeping tracking 100% reliable.
+
+2. **Loyalty Redemption Rules**
+   The backend enforces a minimum redemption of **50 points** (1 point = ₹1.00), capped at the payable total. The frontend mirrors this with live client-side validation to prevent invalid payloads.
+
+3. **Staff Role Gating**
+   The backend's `get_current_staff` dependency only permits `role in ['staff', 'admin']` (HTTP `403` otherwise). The frontend's `ProtectedRoute` enforces the same `allowedRoles` set, without inventing any extra role hierarchy.
+
+4. **Dynamic Pickup Slot Generation**
+   Valid future pickup slots are computed client-side in 15-minute increments from an outlet's `opening_time`, `closing_time`, and `avg_prep_minutes`, preventing out-of-hours orders.
+
+5. **Simulated Payment Gateway**
+   The backend confirms payment via order creation/status updates. The frontend wraps this in a realistic simulated checkout flow (including failure testing) that submits directly to the real order and payment endpoints.
+
+---
+
+## Deployment
+
+- **`render.yaml`** — a Render.com blueprint for deploying the backend (and optionally the frontend) as managed services.
+- **`docker-compose.yml`** — spins up both services locally for integration testing.
+- **Live demo** is hosted on Vercel: [kaffee-coffee-shop-indol.vercel.app](https://kaffee-coffee-shop-indol.vercel.app).
+
+---
+
+## Contributing
+
+1. Fork the repository and create a feature branch.
+2. Keep frontend changes contract-compliant with `API_CONTRACT.md` — avoid backend modifications where a frontend-side fallback is possible.
+3. Run `npm run build` (frontend) and ensure the backend starts cleanly before opening a PR.
+4. Open a pull request with a clear description of the change and any new environment variables required.
+
+---
+
+## License
+
+No license file is currently present in this repository. Add a `LICENSE` file to clarify usage terms if you intend to open-source this project.
