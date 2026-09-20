@@ -14,10 +14,10 @@ from app.core.config import settings
 from app.database import get_db
 from app.models.models import LoyaltyTransaction, Order, Product, User, ProductModifier,OutletProductAvailability
 from app.schemas.schemas import (
-    OrderOut,
     OrderStatusUpdate,
     ProductAvailabilityUpdate,
     ProductOut,
+    StaffOrderOut,
 )
 
 router = APIRouter(prefix="/staff", tags=["Staff Dashboard"])
@@ -32,21 +32,30 @@ VALID_STATE_TRANSITIONS = {
 }
 
 
-@router.get("/orders", response_model=List[OrderOut])
+def _staff_order_out(order: Order, customer_name: Optional[str]) -> StaffOrderOut:
+    out = StaffOrderOut.model_validate(order)
+    out.customer_name = customer_name
+    return out
+
+
+@router.get("/orders", response_model=List[StaffOrderOut])
 async def get_staff_orders(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_staff),
 ):
     stmt = (
         select(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.user))
         .order_by(Order.created_at.desc())
     )
     result = await db.execute(stmt)
-    return result.scalars().all()
+    return [
+        _staff_order_out(o, o.user.full_name if o.user else None)
+        for o in result.scalars().all()
+    ]
 
 
-@router.patch("/orders/{order_id}/status", response_model=OrderOut)
+@router.patch("/orders/{order_id}/status", response_model=StaffOrderOut)
 async def update_order_status(
     order_id: UUID,
     payload: OrderStatusUpdate,
@@ -112,7 +121,8 @@ async def update_order_status(
 
     await db.commit()
     await db.refresh(order)
-    return order
+    customer_name = await db.scalar(select(User.full_name).where(User.id == order.user_id))
+    return _staff_order_out(order, customer_name)
 
 
 @router.patch("/products/{product_id}/availability", response_model=ProductOut)
@@ -231,7 +241,7 @@ class StaffOrderDecision(BaseModel):
     action: str  # "ACCEPT" or "REJECT"
     rejection_reason: Optional[str] = None
 
-@router.patch("/orders/{order_id}/decision", response_model=OrderOut)
+@router.patch("/orders/{order_id}/decision", response_model=StaffOrderOut)
 async def handle_order_decision(
     order_id: UUID,
     payload: StaffOrderDecision,
@@ -286,4 +296,4 @@ async def handle_order_decision(
 
     await db.commit()
     await db.refresh(order)
-    return order
+    return _staff_order_out(order, customer.full_name)

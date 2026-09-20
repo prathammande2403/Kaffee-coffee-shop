@@ -81,6 +81,7 @@ export interface OrderOut {
   id: string;
   outlet_id: string;
   user_id: string;
+  customer_name?: string | null;
   status: OrderStatus;
   pickup_type: PickupType;
   scheduled_pickup_time?: string;

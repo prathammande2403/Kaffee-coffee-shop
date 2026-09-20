@@ -147,6 +147,10 @@ class OrderOut(BaseModel):
 # ==========================================
 # Staff & Administration Schemas
 # ==========================================
+class StaffOrderOut(OrderOut):
+    customer_name: Optional[str] = None
+
+
 class OrderStatusUpdate(BaseModel):
     status: Literal[
         "ORDER_RECEIVED",

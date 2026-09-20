@@ -315,10 +315,11 @@ export const StaffDashboardPage: React.FC = () => {
       if (orderSearch.trim()) {
         const q = orderSearch.toLowerCase().trim();
         const matchesId = order.id.toLowerCase().includes(q);
+        const matchesCustomer = (order.customer_name || '').toLowerCase().includes(q);
         const matchesItem = order.items.some((i) =>
           i.product_name.toLowerCase().includes(q)
         );
-        return matchesId || matchesItem;
+        return matchesId || matchesCustomer || matchesItem;
       }
 
       return true;
@@ -507,7 +508,7 @@ export const StaffDashboardPage: React.FC = () => {
                 />
                 <input
                   type="text"
-                  placeholder="Search order ID or item..."
+                  placeholder="Search customer, order ID or item..."
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
                   className="w-full pl-9 pr-3.5 py-2 text-xs bg-white border border-stone-300 rounded-xl outline-none focus:border-amber-800"
@@ -569,6 +570,9 @@ export const StaffDashboardPage: React.FC = () => {
                                 )}
                               </button>
                             </div>
+                            <span className="text-xs font-bold text-stone-800 block mt-0.5">
+                              {order.customer_name || 'Customer'}
+                            </span>
                             <span className="text-[11px] text-stone-400 block mt-0.5">
                               {formatIST(order.created_at)}
                             </span>
@@ -970,9 +974,9 @@ export const StaffDashboardPage: React.FC = () => {
               {/* Customer ID & Pickup info */}
               <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-stone-500">Customer Reference:</span>
-                  <span className="font-mono font-bold text-stone-900">
-                    ID #{selectedOrderDetails.user_id ? selectedOrderDetails.user_id.slice(0, 8) : 'Customer'}
+                  <span className="text-stone-500">Customer:</span>
+                  <span className="font-bold text-stone-900">
+                    {selectedOrderDetails.customer_name || 'Customer'}
                   </span>
                 </div>
                 <div className="flex justify-between">
